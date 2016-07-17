@@ -38,8 +38,7 @@ func main() {
 	var errors int
 	durations := make([]time.Duration, 0, *number)
 
-	for {
-		duration := <-c
+	for duration := range c {
 		if duration != 0 {
 			durations = append(durations, duration)
 		} else {
@@ -56,10 +55,10 @@ func main() {
 				avg = sum / float64(len(durations))
 			}
 
-			fmt.Printf("Average response time: %dms Errors: %d\n", int(avg), errors)
+			fmt.Printf("Average response time: %dms\nErrors: %d\n", int(avg), errors)
 			fmt.Printf("Total time: %dms\n", int(time.Since(start)/time.Millisecond))
 
-			return
+			close(c)
 		}
 	}
 }
