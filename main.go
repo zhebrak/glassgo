@@ -4,22 +4,13 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
+
+	"github.com/codahale/hdrhistogram"
 )
 
-var c = make(chan time.Duration, 10)
-
-func ping(url string, number int) {
-	for i := 0; i < number; i++ {
-		start := time.Now()
-		resp, err := http.Get(url)
-		if err == nil && resp.StatusCode == 200 {
-			c <- time.Since(start)
-		} else {
-			c <- 0
-		}
-	}
-}
+const timeout = 10 * time.Second
 
 func main() {
 	start := time.Now()
@@ -30,35 +21,47 @@ func main() {
 	url := flag.Arg(0)
 	fmt.Printf("Site: %s\nConcurrency: %d\nNumber of requests: %d\n", url, *concurrency, *number)
 
-	for i := 0; i < *concurrency; i++ {
-		go ping(url, *number / *concurrency)
+	var client = http.Client{
+		Timeout: timeout,
 	}
-	go ping(url, *number%*concurrency)
+	var results = make(chan time.Duration, *number)
+	semaphore := make(chan struct{}, *concurrency)
+	var wg sync.WaitGroup
+	for i := 0; i < *number; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			semaphore <- struct{}{}
+			start := time.Now()
+			resp, err := client.Get(url)
+			if err == nil && resp.StatusCode == 200 {
+				results <- time.Since(start)
+			} else {
+				results <- 0
+			}
+			<-semaphore
+		}()
+	}
+	wg.Wait()
+	close(results)
 
 	var errors int
-	durations := make([]time.Duration, 0, *number)
+	hist := hdrhistogram.New(1, int64(timeout)/1000, 3)
 
-	for duration := range c {
+	// Run this separately to not introduce locks for histogram and errors counter.
+	for duration := range results {
 		if duration != 0 {
-			durations = append(durations, duration)
+			hist.RecordValue(duration.Nanoseconds() / 1000000) // record milliseconds
 		} else {
 			errors++
 		}
-
-		if len(durations)+errors == *number {
-			var sum, avg float64
-			for _, val := range durations {
-				sum += float64(val / time.Millisecond)
-			}
-
-			if len(durations) != 0 {
-				avg = sum / float64(len(durations))
-			}
-
-			fmt.Printf("Average response time: %dms\nErrors: %d\n", int(avg), errors)
-			fmt.Printf("Total time: %dms\n", int(time.Since(start)/time.Millisecond))
-
-			close(c)
-		}
 	}
+
+	fmt.Printf("Latency mean: %dms\n", int(hist.Mean()))
+	fmt.Printf("Latency 50%%ile: %dms\n", hist.ValueAtQuantile(50))
+	fmt.Printf("Latency 90%%ile: %dms\n", hist.ValueAtQuantile(90))
+	fmt.Printf("Latency 99%%ile: %dms\n", hist.ValueAtQuantile(99))
+	fmt.Printf("Latency 99.99%%ile: %dms\n", hist.ValueAtQuantile(99.99))
+	fmt.Printf("Errors: %d\n", errors)
+	fmt.Printf("Total time: %dms\n", int(time.Since(start)/time.Millisecond))
 }
