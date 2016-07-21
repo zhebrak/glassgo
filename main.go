@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"gopkg.in/cheggaaa/pb.v1"
 	"net/http"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 )
 
 type requestResult struct {
-	duration time.Duration
+	duration int // ms
 	err      error
 }
 
@@ -30,6 +33,10 @@ func finishPB(progress *pb.ProgressBar) {
 	progress.Finish()
 }
 
+func percentile(s []int, p int) int {
+	return s[len(s)*p/100-1]
+}
+
 func ping(url string, timeout int) *requestResult {
 	start := time.Now()
 
@@ -38,7 +45,7 @@ func ping(url string, timeout int) *requestResult {
 	}
 	_, err := client.Get(url)
 
-	return &requestResult{time.Since(start), err}
+	return &requestResult{int(time.Since(start) / time.Millisecond), err}
 }
 
 func main() {
@@ -47,6 +54,8 @@ func main() {
 	concurrency := flag.Int("c", 10, "concurrency")
 	number := flag.Int("n", 50, "number of requests")
 	timeout := flag.Int("t", 10, "timeout per request in seconds")
+	percentiles := flag.String("p", "90,99", "comma separated percentiles")
+
 	flag.Parse()
 	url := flag.Arg(0)
 
@@ -66,7 +75,7 @@ func main() {
 	}
 
 	var errors int
-	durations := make([]time.Duration, 0, *number)
+	durations := make([]int, 0, *number)
 
 	progress := startPB(*number)
 	for res := range c {
@@ -79,27 +88,31 @@ func main() {
 		}
 
 		if len(durations)+errors == *number {
-			var sum, avg, max, tval float64
+			var sum, avg int
 			for _, val := range durations {
-				tval = float64(val / time.Millisecond)
-
-				sum += tval
-				if max < tval {
-					max = tval
-				}
+				sum += val
 			}
 
 			if len(durations) != 0 {
-				avg = sum / float64(len(durations))
+				avg = sum / len(durations)
 			}
 
 			finishPB(progress)
 
+			sort.Ints(durations)
+
 			fmt.Printf("Site: %s\n", url)
 			fmt.Printf("Number: %d\n", *number)
-			fmt.Printf("Concurrency: %d\n", *concurrency)
-			fmt.Printf("Avg: %dms\n", int(avg))
-			fmt.Printf("Max: %dms\n", int(max))
+			fmt.Printf("Concurrency: %d\n\n", *concurrency)
+
+			for _, p := range strings.Split(*percentiles, ",") {
+				i, _ := strconv.Atoi(p)
+				fmt.Printf("%s%%: <%dms\n", p, percentile(durations, i))
+			}
+
+			fmt.Printf("Avg: %dms\n", avg)
+			fmt.Printf("Max: %dms\n\n", durations[len(durations)-1])
+
 			fmt.Printf("Total: %dms\n", int(time.Since(start)/time.Millisecond))
 			fmt.Printf("Errors: %d\n\n", errors)
 
