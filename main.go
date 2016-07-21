@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"gopkg.in/cheggaaa/pb.v1"
 	"net/http"
 	"time"
 )
@@ -10,6 +11,23 @@ import (
 type requestResult struct {
 	duration time.Duration
 	err      error
+}
+
+func startPB(number int) *pb.ProgressBar {
+	progress := pb.New(number)
+
+	progress.ShowBar = false
+	progress.ShowTimeLeft = false
+	progress.ShowFinalTime = false
+	progress.Start()
+
+	return progress
+}
+
+func finishPB(progress *pb.ProgressBar) {
+	progress.ShowPercent = false
+	progress.ShowCounters = false
+	progress.Finish()
 }
 
 func ping(url string, timeout int) *requestResult {
@@ -32,10 +50,6 @@ func main() {
 	flag.Parse()
 	url := flag.Arg(0)
 
-	fmt.Printf("Site: %s\n", url)
-	fmt.Printf("Number: %d\n", *number)
-	fmt.Printf("Concurrency: %d\n", *concurrency)
-
 	var c = make(chan *requestResult, *concurrency)
 	var queue = make(chan int, *number)
 
@@ -54,7 +68,10 @@ func main() {
 	var errors int
 	durations := make([]time.Duration, 0, *number)
 
+	progress := startPB(*number)
 	for res := range c {
+		progress.Increment()
+
 		if res.err != nil {
 			errors++
 		} else {
@@ -76,10 +93,15 @@ func main() {
 				avg = sum / float64(len(durations))
 			}
 
+			finishPB(progress)
+
+			fmt.Printf("Site: %s\n", url)
+			fmt.Printf("Number: %d\n", *number)
+			fmt.Printf("Concurrency: %d\n", *concurrency)
 			fmt.Printf("Avg: %dms\n", int(avg))
 			fmt.Printf("Max: %dms\n", int(max))
 			fmt.Printf("Total: %dms\n", int(time.Since(start)/time.Millisecond))
-			fmt.Printf("Errors: %d\n", errors)
+			fmt.Printf("Errors: %d\n\n", errors)
 
 			return
 		}
