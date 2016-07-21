@@ -8,4 +8,5 @@ Concurrency: 20
 Avg: 219ms
 Max: 364ms
 Total: 2294ms
-Errors: 0```
+Errors: 0
+```

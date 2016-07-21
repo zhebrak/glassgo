@@ -12,13 +12,6 @@ type requestResult struct {
 	err      error
 }
 
-func pinger(url string, queue chan int, c chan *requestResult, timeout int) {
-	for _ = range queue {
-		c <- ping(url, timeout)
-	}
-
-}
-
 func ping(url string, timeout int) *requestResult {
 	start := time.Now()
 
@@ -47,7 +40,11 @@ func main() {
 	var queue = make(chan int, *number)
 
 	for i := 0; i < *concurrency; i++ {
-		go pinger(url, queue, c, *timeout)
+		go func() {
+			for _ = range queue {
+				c <- ping(url, *timeout)
+			}
+		}()
 	}
 
 	for i := 0; i < *number; i++ {
