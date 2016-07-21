@@ -7,58 +7,84 @@ import (
 	"time"
 )
 
-var c = make(chan time.Duration, 10)
+type requestResult struct {
+	duration time.Duration
+	err      error
+}
 
-func ping(url string, number int) {
-	for i := 0; i < number; i++ {
-		start := time.Now()
-		resp, err := http.Get(url)
-		if err == nil && resp.StatusCode == 200 {
-			c <- time.Since(start)
-		} else {
-			c <- 0
-		}
+func pinger(url string, queue chan int, c chan *requestResult, timeout int) {
+	for _ = range queue {
+		c <- ping(url, timeout)
 	}
+
+}
+
+func ping(url string, timeout int) *requestResult {
+	start := time.Now()
+
+	client := http.Client{
+		Timeout: time.Duration(timeout) * time.Second,
+	}
+	_, err := client.Get(url)
+
+	return &requestResult{time.Since(start), err}
 }
 
 func main() {
 	start := time.Now()
+
 	concurrency := flag.Int("c", 10, "concurrency")
 	number := flag.Int("n", 50, "number of requests")
+	timeout := flag.Int("t", 10, "timeout per request in seconds")
 	flag.Parse()
-
 	url := flag.Arg(0)
-	fmt.Printf("Site: %s\nConcurrency: %d\nNumber of requests: %d\n", url, *concurrency, *number)
+
+	fmt.Printf("Site: %s\n", url)
+	fmt.Printf("Number: %d\n", *number)
+	fmt.Printf("Concurrency: %d\n", *concurrency)
+
+	var c = make(chan *requestResult, *concurrency)
+	var queue = make(chan int, *number)
 
 	for i := 0; i < *concurrency; i++ {
-		go ping(url, *number / *concurrency)
+		go pinger(url, queue, c, *timeout)
 	}
-	go ping(url, *number%*concurrency)
+
+	for i := 0; i < *number; i++ {
+		queue <- i
+	}
 
 	var errors int
 	durations := make([]time.Duration, 0, *number)
 
-	for duration := range c {
-		if duration != 0 {
-			durations = append(durations, duration)
-		} else {
+	for res := range c {
+		if res.err != nil {
 			errors++
+		} else {
+			durations = append(durations, res.duration)
 		}
 
 		if len(durations)+errors == *number {
-			var sum, avg float64
+			var sum, avg, max, tval float64
 			for _, val := range durations {
-				sum += float64(val / time.Millisecond)
+				tval = float64(val / time.Millisecond)
+
+				sum += tval
+				if max < tval {
+					max = tval
+				}
 			}
 
 			if len(durations) != 0 {
 				avg = sum / float64(len(durations))
 			}
 
-			fmt.Printf("Average response time: %dms\nErrors: %d\n", int(avg), errors)
-			fmt.Printf("Total time: %dms\n", int(time.Since(start)/time.Millisecond))
+			fmt.Printf("Avg: %dms\n", int(avg))
+			fmt.Printf("Max: %dms\n", int(max))
+			fmt.Printf("Total: %dms\n", int(time.Since(start)/time.Millisecond))
+			fmt.Printf("Errors: %d\n", errors)
 
-			close(c)
+			return
 		}
 	}
 }

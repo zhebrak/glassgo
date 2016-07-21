@@ -1,10 +1,11 @@
 # glassgo
 
 ```code
-~/projects/go/src/glassgo z> go run main.go -c 10 -n 200 https://zhebrak.io
+~/projects/go/src/glassgo z> go run main.go -c 20 -n 200 -t 3 https://zhebrak.io
 Site: https://zhebrak.io
-Concurrency: 10
-Number of requests: 200
-Avg: 224ms Errors: 0
-Total time: 4551ms
-```
+Number: 200
+Concurrency: 20
+Avg: 219ms
+Max: 364ms
+Total: 2294ms
+Errors: 0```
