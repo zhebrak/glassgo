@@ -38,7 +38,7 @@ func percentile(s []int, p int) int {
 	return s[len(s)*p/100-1]
 }
 
-func ping(url string, timeout int) *requestResult {
+func get(url string, timeout int) *requestResult {
 	start := time.Now()
 
 	client := http.Client{
@@ -66,7 +66,7 @@ func main() {
 	for i := 0; i < *concurrency; i++ {
 		go func() {
 			for _ = range queue {
-				c <- ping(url, *timeout)
+				c <- get(url, *timeout)
 			}
 		}()
 	}
