@@ -3,12 +3,13 @@ package main
 import (
 	"flag"
 	"fmt"
-	"gopkg.in/cheggaaa/pb.v1"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"gopkg.in/cheggaaa/pb.v1"
 )
 
 type requestResult struct {
@@ -17,20 +18,20 @@ type requestResult struct {
 }
 
 func startPB(number int) *pb.ProgressBar {
-	progress := pb.New(number)
+	pbar := pb.New(number)
 
-	progress.ShowBar = false
-	progress.ShowTimeLeft = false
-	progress.ShowFinalTime = false
-	progress.Start()
+	pbar.ShowBar = false
+	pbar.ShowTimeLeft = false
+	pbar.ShowFinalTime = false
+	pbar.Start()
 
-	return progress
+	return pbar
 }
 
-func finishPB(progress *pb.ProgressBar) {
-	progress.ShowPercent = false
-	progress.ShowCounters = false
-	progress.Finish()
+func finishPB(pbar *pb.ProgressBar) {
+	pbar.ShowPercent = false
+	pbar.ShowCounters = false
+	pbar.Finish()
 }
 
 func percentile(s []int, p int) int {
@@ -77,9 +78,9 @@ func main() {
 	var errors int
 	durations := make([]int, 0, *number)
 
-	progress := startPB(*number)
+	pbar := startPB(*number)
 	for res := range c {
-		progress.Increment()
+		pbar.Increment()
 
 		if res.err != nil {
 			errors++
@@ -97,7 +98,7 @@ func main() {
 				avg = sum / len(durations)
 			}
 
-			finishPB(progress)
+			finishPB(pbar)
 
 			sort.Ints(durations)
 
